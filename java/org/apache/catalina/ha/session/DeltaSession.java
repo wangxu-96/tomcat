@@ -106,7 +106,15 @@ public class DeltaSession extends StandardSession implements Externalizable,Clus
         super(manager);
         boolean recordAllActions = manager instanceof ClusterManagerBase &&
                 ((ClusterManagerBase)manager).isRecordAllActions();
-        deltaRequest = new DeltaRequest(getIdInternal(), recordAllActions);
+        deltaRequest = createRequest(getIdInternal(), recordAllActions);
+    }
+
+    private DeltaRequest createRequest() {
+        return createRequest(null, false);
+    }
+
+    protected DeltaRequest createRequest(String sessionId, boolean recordAllActions) {
+        return new DeltaRequest(sessionId, recordAllActions);
     }
 
     // ----------------------------------------------------- ReplicatedMapEntry
@@ -145,10 +153,10 @@ public class DeltaSession extends StandardSession implements Externalizable,Clus
             deltaRequestPool = ((ClusterManagerBase) manager).getDeltaRequestPool();
             newDeltaRequest = deltaRequestPool.pop();
             if (newDeltaRequest == null) {
-                newDeltaRequest = new DeltaRequest(null, ((ClusterManagerBase) manager).isRecordAllActions());
+                newDeltaRequest = createRequest(null, ((ClusterManagerBase) manager).isRecordAllActions());
             }
         } else {
-            newDeltaRequest = new DeltaRequest();
+            newDeltaRequest = createRequest();
         }
 
         DeltaRequest oldDeltaRequest = replaceDeltaRequest(newDeltaRequest);
@@ -429,7 +437,7 @@ public class DeltaSession extends StandardSession implements Externalizable,Clus
         if (this.expiring) {
             return true;
         }
-        if (ACTIVITY_CHECK && accessCount.get() > 0) {
+        if (activityCheck && accessCount.get() > 0) {
             return true;
         }
         if (maxInactiveInterval > 0) {
@@ -679,7 +687,7 @@ public class DeltaSession extends StandardSession implements Externalizable,Clus
 
             DeltaRequest newDeltaRequest = deltaRequestPool.pop();
             if (newDeltaRequest == null) {
-                newDeltaRequest = new DeltaRequest(null, ((ClusterManagerBase) manager).isRecordAllActions());
+                newDeltaRequest = createRequest(null, ((ClusterManagerBase) manager).isRecordAllActions());
             }
 
             ReplicationStream ois = ((ClusterManagerBase) manager).getReplicationStream(delta);
@@ -846,7 +854,9 @@ public class DeltaSession extends StandardSession implements Externalizable,Clus
             if (exclude(name, value)) {
                 continue;
             }
-            attributes.put(name, value);
+            // ConcurrentHashMap does not allow null keys or values
+            if(null != value)
+                attributes.put(name, value);
         }
         isValid = isValidSave;
 
@@ -1001,7 +1011,11 @@ public class DeltaSession extends StandardSession implements Externalizable,Clus
     }
 
     protected void setAccessCount(int count) {
-        if ( accessCount == null && ACTIVITY_CHECK ) accessCount = new AtomicInteger();
-        if ( accessCount != null ) super.accessCount.set(count);
+        if (accessCount == null && activityCheck) {
+            accessCount = new AtomicInteger();
+        }
+        if (accessCount != null) {
+            accessCount.set(count);
+        }
     }
 }

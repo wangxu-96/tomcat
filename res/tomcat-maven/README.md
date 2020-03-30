@@ -80,28 +80,9 @@ oc policy add-role-to-user view system:serviceaccount:$(oc project -q):default -
 
 ## Native Image
 
-Download Graal native-image and tools.
-```
-export JAVA_HOME=/absolute...path...to/graalvm-ce-19.0.0
-export TOMCAT_MAVEN=/absolute...path...to/tomcat-maven
-cd $JAVA_HOME/bin
-./gu install native-image
-```
-As Graal does not support dynamic class loading, all Servlets and support classes of the webapp, which would traditionally be placed
-in `/WEB-INF/classes` and `/WEB-INF/lib`, must be included as part of the tomcat-maven build process, so they are packaged into the
-`target/tomcat-maven-1.0.jar`.
+The Tomcat documentation includes information on using the native-image tool (docs/graal.html).
 
-Run Tomcat with the agent in full trace mode.
-```
-cd $TOMCAT_MAVEN
-$JAVA_HOME/bin/java -agentlib:native-image-agent=trace-output=$TOMCAT_MAVEN/target/trace-file.json -jar target/tomcat-maven-1.0.jar
-```
-Then exercise necessary paths of your service with the Tomcat configuration. Any changes to the Tomcat configuration requires running
-the substrate VM with the agent again.
-
-Generate the final json files using native-image-configuration then use native image using the generated reflection metadata:
-```
-$JAVA_HOME/bin/native-image-configure generate --trace-input=$TOMCAT_MAVEN/target/trace-file.json --output-dir=$TOMCAT_MAVEN/target
-$JAVA_HOME/bin/native-image --allow-incomplete-classpath -H:+ReportUnsupportedElementsAtRuntime -H:EnableURLProtocols=jar -H:ConfigurationFileDirectories=$TOMCAT_MAVEN/target/ -H:ReflectionConfigurationFiles=$TOMCAT_MAVEN/tomcat-reflection.json -H:ResourceConfigurationFiles=$TOMCAT_MAVEN/tomcat-resource.json -H:ResourceConfigurationFiles=$TOMCAT_MAVEN/tomcat-resource.json -jar $TOMCAT_MAVEN/target/tomcat-maven-1.0.jar
-./tomcat-maven-1.0 -Dcatalina.base=. -Djava.util.logging.config.file=conf/logging.properties -Djava.util.logging.manager=org.apache.juli.ClassLoaderLogManager
-```
+Running in a container is possible, an example `DockerfileGraal` is given. To use a native image in a container that is not identical to the build platform,
+the `native-image` call will need to use the additional `--static` parameter to statically link base libraries (this will then require zlib and glibc
+static libraries). Due to TLS using dynamic libraries (SunEC for JSSE and tomcat-native for OpenSSL), TLS support is not available with static linking.
+If TLS support is needed, the native image must instead be built on a platform identical to the target platform.

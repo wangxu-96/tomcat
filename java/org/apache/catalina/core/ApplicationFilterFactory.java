@@ -16,9 +16,9 @@
  */
 package org.apache.catalina.core;
 
-import javax.servlet.DispatcherType;
-import javax.servlet.Servlet;
-import javax.servlet.ServletRequest;
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.Servlet;
+import jakarta.servlet.ServletRequest;
 
 import org.apache.catalina.Globals;
 import org.apache.catalina.Wrapper;
@@ -81,6 +81,7 @@ public final class ApplicationFilterFactory {
 
         // Acquire the filter mappings for this Context
         StandardContext context = (StandardContext) wrapper.getParent();
+        filterChain.setDispatcherWrapsSameObject(context.getDispatcherWrapsSameObject());
         FilterMap filterMaps[] = context.findFilterMaps();
 
         // If there are no filter mappings, we are done

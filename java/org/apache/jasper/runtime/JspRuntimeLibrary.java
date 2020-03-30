@@ -24,17 +24,17 @@ import java.io.OutputStreamWriter;
 import java.lang.reflect.Method;
 import java.util.Enumeration;
 
-import javax.servlet.RequestDispatcher;
-import javax.servlet.ServletException;
-import javax.servlet.ServletRequest;
-import javax.servlet.ServletResponse;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.jsp.JspException;
-import javax.servlet.jsp.JspWriter;
-import javax.servlet.jsp.PageContext;
-import javax.servlet.jsp.tagext.BodyContent;
-import javax.servlet.jsp.tagext.BodyTag;
-import javax.servlet.jsp.tagext.Tag;
+import jakarta.servlet.RequestDispatcher;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.jsp.JspException;
+import jakarta.servlet.jsp.JspWriter;
+import jakarta.servlet.jsp.PageContext;
+import jakarta.servlet.jsp.tagext.BodyContent;
+import jakarta.servlet.jsp.tagext.BodyTag;
+import jakarta.servlet.jsp.tagext.Tag;
 
 import org.apache.jasper.JasperException;
 import org.apache.jasper.compiler.Localizer;
@@ -56,10 +56,26 @@ import org.apache.tomcat.InstanceManager;
  */
 public class JspRuntimeLibrary {
 
+    public static final boolean GRAAL;
+
+    static {
+        boolean result = false;
+        try {
+            Class<?> nativeImageClazz = Class.forName("org.graalvm.nativeimage.ImageInfo");
+            result = nativeImageClazz.getMethod("inImageCode").invoke(null) != null;
+            // Note: This will also be true for the Graal substrate VM
+        } catch (ClassNotFoundException e) {
+            // Must be Graal
+        } catch (ReflectiveOperationException | IllegalArgumentException e) {
+            // Should never happen
+        }
+        GRAAL = result;
+    }
+
     /**
-     * Returns the value of the javax.servlet.error.exception request
+     * Returns the value of the jakarta.servlet.error.exception request
      * attribute value, if present, otherwise the value of the
-     * javax.servlet.jsp.jspException request attribute value.
+     * jakarta.servlet.jsp.jspException request attribute value.
      *
      * This method is called at the beginning of the generated servlet code
      * for a JSP error page, when the "exception" implicit scripting language
@@ -291,17 +307,24 @@ public class JspRuntimeLibrary {
         Class<?> type = null;
         Class<?> propertyEditorClass = null;
         try {
-            java.beans.BeanInfo info
+            if (GRAAL) {
+                method = getWriteMethod(bean.getClass(), prop);
+                if (method.getParameterTypes().length > 0) {
+                    type = method.getParameterTypes()[0];
+                }
+            } else {
+                java.beans.BeanInfo info
                 = java.beans.Introspector.getBeanInfo(bean.getClass());
-            if ( info != null ) {
-                java.beans.PropertyDescriptor pd[]
-                    = info.getPropertyDescriptors();
-                for (int i = 0 ; i < pd.length ; i++) {
-                    if ( pd[i].getName().equals(prop) ) {
-                        method = pd[i].getWriteMethod();
-                        type   = pd[i].getPropertyType();
-                        propertyEditorClass = pd[i].getPropertyEditorClass();
-                        break;
+                if ( info != null ) {
+                    java.beans.PropertyDescriptor pd[]
+                            = info.getPropertyDescriptors();
+                    for (int i = 0 ; i < pd.length ; i++) {
+                        if ( pd[i].getName().equals(prop) ) {
+                            method = pd[i].getWriteMethod();
+                            type   = pd[i].getPropertyType();
+                            propertyEditorClass = pd[i].getPropertyEditorClass();
+                            break;
+                        }
                     }
                 }
             }
@@ -709,24 +732,48 @@ public class JspRuntimeLibrary {
         }
     }
 
+    /**
+     * Reverse of Introspector.decapitalize.
+     * @param name The name
+     * @return the capitalized string
+     */
+    public static String capitalize(String name) {
+        if (name == null || name.length() == 0) {
+            return name;
+        }
+        char chars[] = name.toCharArray();
+        chars[0] = Character.toUpperCase(chars[0]);
+        return new String(chars);
+    }
+
     public static Method getWriteMethod(Class<?> beanClass, String prop)
-    throws JasperException {
-        Method method = null;
+            throws JasperException {
+        Method result = null;
         Class<?> type = null;
-        try {
-            java.beans.BeanInfo info = java.beans.Introspector.getBeanInfo(beanClass);
-            java.beans.PropertyDescriptor pd[] = info.getPropertyDescriptors();
-            for (int i = 0 ; i < pd.length ; i++) {
-                if ( pd[i].getName().equals(prop) ) {
-                    method = pd[i].getWriteMethod();
-                    type = pd[i].getPropertyType();
-                    break;
+        if (GRAAL) {
+            String setter = "set" + capitalize(prop);
+            Method methods[] = beanClass.getMethods();
+            for (Method method : methods) {
+                if (setter.equals(method.getName())) {
+                    return method;
                 }
             }
-        } catch (Exception ex) {
-            throw new JasperException (ex);
+        } else {
+            try {
+                java.beans.BeanInfo info = java.beans.Introspector.getBeanInfo(beanClass);
+                java.beans.PropertyDescriptor pd[] = info.getPropertyDescriptors();
+                for (int i = 0 ; i < pd.length ; i++) {
+                    if ( pd[i].getName().equals(prop) ) {
+                        result = pd[i].getWriteMethod();
+                        type = pd[i].getPropertyType();
+                        break;
+                    }
+                }
+            } catch (Exception ex) {
+                throw new JasperException (ex);
+            }
         }
-        if (method == null) {
+        if (result == null) {
             if (type == null) {
                 throw new JasperException(Localizer.getMessage(
                         "jsp.error.beans.noproperty", prop, beanClass.getName()));
@@ -736,28 +783,37 @@ public class JspRuntimeLibrary {
                         prop, type.getName(), beanClass.getName()));
             }
         }
-        return method;
+        return result;
     }
 
     public static Method getReadMethod(Class<?> beanClass, String prop)
             throws JasperException {
-
-        Method method = null;
+        Method result = null;
         Class<?> type = null;
-        try {
-            java.beans.BeanInfo info = java.beans.Introspector.getBeanInfo(beanClass);
-            java.beans.PropertyDescriptor pd[] = info.getPropertyDescriptors();
-            for (int i = 0 ; i < pd.length ; i++) {
-                if (pd[i].getName().equals(prop)) {
-                    method = pd[i].getReadMethod();
-                    type = pd[i].getPropertyType();
-                    break;
+        if (GRAAL) {
+            String setter = "get" + capitalize(prop);
+            Method methods[] = beanClass.getMethods();
+            for (Method method : methods) {
+                if (setter.equals(method.getName())) {
+                    return method;
                 }
             }
-        } catch (Exception ex) {
-            throw new JasperException (ex);
+        } else {
+            try {
+                java.beans.BeanInfo info = java.beans.Introspector.getBeanInfo(beanClass);
+                java.beans.PropertyDescriptor pd[] = info.getPropertyDescriptors();
+                for (int i = 0 ; i < pd.length ; i++) {
+                    if (pd[i].getName().equals(prop)) {
+                        result = pd[i].getReadMethod();
+                        type = pd[i].getPropertyType();
+                        break;
+                    }
+                }
+            } catch (Exception ex) {
+                throw new JasperException (ex);
+            }
         }
-        if (method == null) {
+        if (result == null) {
             if (type == null) {
                 throw new JasperException(Localizer.getMessage(
                         "jsp.error.beans.noproperty", prop, beanClass.getName()));
@@ -766,8 +822,7 @@ public class JspRuntimeLibrary {
                         "jsp.error.beans.nomethod", prop, beanClass.getName()));
             }
         }
-
-        return method;
+        return result;
     }
 
     //*********************************************************************

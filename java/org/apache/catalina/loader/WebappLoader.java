@@ -25,9 +25,11 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
 
 import javax.management.ObjectName;
-import javax.servlet.ServletContext;
+
+import jakarta.servlet.ServletContext;
 
 import org.apache.catalina.Context;
 import org.apache.catalina.Globals;
@@ -40,6 +42,7 @@ import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.ExceptionUtils;
 import org.apache.tomcat.util.buf.UDecoder;
+import org.apache.tomcat.util.compat.JreCompat;
 import org.apache.tomcat.util.modeler.Registry;
 import org.apache.tomcat.util.res.StringManager;
 
@@ -63,29 +66,6 @@ public class WebappLoader extends LifecycleMBeanBase
     implements Loader, PropertyChangeListener {
 
     private static final Log log = LogFactory.getLog(WebappLoader.class);
-
-    // ----------------------------------------------------------- Constructors
-
-    /**
-     * Construct a new WebappLoader with no defined parent class loader
-     * (so that the actual parent will be the system class loader).
-     */
-    public WebappLoader() {
-        this(null);
-    }
-
-
-    /**
-     * Construct a new WebappLoader with the specified class loader
-     * to be defined as the parent of the ClassLoader we ultimately create.
-     *
-     * @param parent The parent class loader
-     */
-    public WebappLoader(ClassLoader parent) {
-        super();
-        this.parentClassLoader = parent;
-    }
-
 
     // ----------------------------------------------------- Instance Variables
 
@@ -114,12 +94,6 @@ public class WebappLoader extends LifecycleMBeanBase
      * loader implementation must be used.
      */
     private String loaderClass = ParallelWebappClassLoader.class.getName();
-
-
-    /**
-     * The parent class loader of the class loader we will create.
-     */
-    private ClassLoader parentClassLoader = null;
 
 
     /**
@@ -503,9 +477,8 @@ public class WebappLoader extends LifecycleMBeanBase
         Class<?> clazz = Class.forName(loaderClass);
         WebappClassLoaderBase classLoader = null;
 
-        if (parentClassLoader == null) {
-            parentClassLoader = context.getParentClassLoader();
-        }
+        ClassLoader parentClassLoader = context.getParentClassLoader();
+
         Class<?>[] argTypes = { ClassLoader.class };
         Object[] args = { parentClassLoader };
         Constructor<?> constr = clazz.getConstructor(argTypes);
@@ -601,9 +574,9 @@ public class WebappLoader extends LifecycleMBeanBase
                 for (int i = 0; i < repositories.length; i++) {
                     String repository = repositories[i].toString();
                     if (repository.startsWith("file://"))
-                        repository = UDecoder.URLDecode(repository.substring(7));
+                        repository = UDecoder.URLDecode(repository.substring(7), StandardCharsets.UTF_8);
                     else if (repository.startsWith("file:"))
-                        repository = UDecoder.URLDecode(repository.substring(5));
+                        repository = UDecoder.URLDecode(repository.substring(5), StandardCharsets.UTF_8);
                     else
                         continue;
                     if (repository == null)
@@ -624,7 +597,10 @@ public class WebappLoader extends LifecycleMBeanBase
             }
             return false;
         } else {
-            log.info(sm.getString("webappLoader.unknownClassLoader", loader, loader.getClass()));
+            // Ignore Graal "unknown" classloader
+            if (!JreCompat.isGraalAvailable()) {
+                log.info(sm.getString("webappLoader.unknownClassLoader", loader, loader.getClass()));
+            }
             return false;
         }
         return true;

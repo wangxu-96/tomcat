@@ -23,6 +23,7 @@ RUN mkdir -m 777 -p /deployments
 ADD target/tomcat-maven-1.0.jar /deployments/app.jar
 ADD conf /deployments/conf
 ADD webapps /deployments/webapps
+RUN chmod 777 /deployments/webapps
 
 WORKDIR /deployments
 
@@ -38,16 +39,16 @@ ENV JAVA_OPTS="${JAVA_OPTS} -Djava.util.logging.manager=org.apache.juli.ClassLoa
 
 RUN sh -c 'touch app.jar'
 
-RUN mkdir /opt
+RUN mkdir -p /opt
 
 # Optional: Add Jolokia agent for JMX monitoring and management
-# RUN mkdir /opt/jolokia && wget https://repo.maven.apache.org/maven2/org/jolokia/jolokia-jvm/1.6.0/jolokia-jvm-1.6.0-agent.jar -O /opt/jolokia/jolokia.jar
+# RUN mkdir /opt/jolokia && wget https://repo.maven.apache.org/maven2/org/jolokia/jolokia-jvm/1.6.2/jolokia-jvm-1.6.2-agent.jar -O /opt/jolokia/jolokia.jar
 # ARG jolokiaport=8778
 # ENV JAVA_OPTS="-javaagent:/opt/jolokia/jolokia.jar=host=*,port=$jolokiaport,protocol=https,authIgnoreCerts=true ${JAVA_OPTS}"
 # EXPOSE $jolokiaport
 
 # Optional: Add Prometheus agent for JMX monitoring
-# RUN mkdir /opt/prometheus && wget https://repo.maven.apache.org/maven2/io/prometheus/jmx/jmx_prometheus_javaagent/0.11.0/jmx_prometheus_javaagent-0.11.0.jar -O /opt/prometheus/prometheus.jar && wget https://raw.githubusercontent.com/prometheus/jmx_exporter/master/example_configs/tomcat.yml -O conf/prometheus.yaml
+# RUN mkdir /opt/prometheus && wget https://repo.maven.apache.org/maven2/io/prometheus/jmx/jmx_prometheus_javaagent/0.12.0/jmx_prometheus_javaagent-0.12.0.jar -O /opt/prometheus/prometheus.jar && wget https://raw.githubusercontent.com/prometheus/jmx_exporter/master/example_configs/tomcat.yml -O conf/prometheus.yaml
 # ARG prometheusport=9404
 # ENV JAVA_OPTS="-javaagent:/opt/prometheus/prometheus.jar=$prometheusport:conf/prometheus.yaml ${JAVA_OPTS}"
 # EXPOSE $prometheusport

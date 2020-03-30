@@ -197,6 +197,15 @@ public abstract class ManagerBase extends LifecycleMBeanBase implements Manager 
 
     private boolean notifyAttributeListenerOnUnchangedValue = true;
 
+    /**
+     * Determines whether sessions managed by this manager shall persist (serialize)
+     * authentication information or not.
+     */
+    private boolean persistAuthentication = false;
+
+    private boolean sessionActivityCheck = Globals.STRICT_SERVLET_COMPLIANCE;
+
+    private boolean sessionLastAccessAtStart = Globals.STRICT_SERVLET_COMPLIANCE;
 
     // ------------------------------------------------------------ Constructors
 
@@ -204,8 +213,11 @@ public abstract class ManagerBase extends LifecycleMBeanBase implements Manager 
         if (Globals.IS_SECURITY_ENABLED) {
             // Minimum set required for default distribution/persistence to work
             // plus String
+            // plus SerializablePrincipal and String[] (required for authentication persistence)
             setSessionAttributeValueClassNameFilter(
-                    "java\\.lang\\.(?:Boolean|Integer|Long|Number|String)");
+                    "java\\.lang\\.(?:Boolean|Integer|Long|Number|String)"
+                    + "|org\\.apache\\.catalina\\.realm\\.GenericPrincipal\\$SerializablePrincipal"
+                    + "|\\[Ljava.lang.String;");
             setWarnOnSessionAttributeFilterFailure(true);
         }
     }
@@ -235,6 +247,30 @@ public abstract class ManagerBase extends LifecycleMBeanBase implements Manager 
     @Override
     public void setNotifyBindingListenerOnUnchangedValue(boolean notifyBindingListenerOnUnchangedValue) {
         this.notifyBindingListenerOnUnchangedValue = notifyBindingListenerOnUnchangedValue;
+    }
+
+
+    @Override
+    public boolean getSessionActivityCheck() {
+        return sessionActivityCheck;
+    }
+
+
+    @Override
+    public void setSessionActivityCheck(boolean sessionActivityCheck) {
+        this.sessionActivityCheck = sessionActivityCheck;
+    }
+
+
+    @Override
+    public boolean getSessionLastAccessAtStart() {
+        return sessionLastAccessAtStart;
+    }
+
+
+    @Override
+    public void setSessionLastAccessAtStart(boolean sessionLastAccessAtStart) {
+        this.sessionLastAccessAtStart = sessionLastAccessAtStart;
     }
 
 
@@ -543,8 +579,32 @@ public abstract class ManagerBase extends LifecycleMBeanBase implements Manager 
                                    Integer.valueOf(this.processExpiresFrequency));
 
     }
-    // --------------------------------------------------------- Public Methods
 
+
+    /**
+     * Return whether sessions managed by this manager shall persist authentication
+     * information or not.
+     *
+     * @return {@code true}, sessions managed by this manager shall persist
+     *         authentication information; {@code false} otherwise
+     */
+    public boolean getPersistAuthentication() {
+        return this.persistAuthentication;
+    }
+
+    /**
+     * Set whether sessions managed by this manager shall persist authentication
+     * information or not.
+     *
+     * @param persistAuthentication if {@code true}, sessions managed by this manager
+     *                              shall persist authentication information
+     */
+    public void setPersistAuthentication(boolean persistAuthentication) {
+        this.persistAuthentication = persistAuthentication;
+    }
+
+
+    // --------------------------------------------------------- Public Methods
 
     /**
      * {@inheritDoc}
@@ -752,9 +812,10 @@ public abstract class ManagerBase extends LifecycleMBeanBase implements Manager 
 
 
     @Override
-    public void changeSessionId(Session session) {
+    public String rotateSessionId(Session session) {
         String newId = generateSessionId();
         changeSessionId(session, newId, true, true);
+        return newId;
     }
 
 

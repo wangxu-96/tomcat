@@ -26,25 +26,25 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
-import javax.servlet.ServletOutputStream;
-import javax.servlet.ServletResponse;
-import javax.servlet.SessionTrackingMode;
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpServletResponseWrapper;
+import jakarta.servlet.ServletOutputStream;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.SessionTrackingMode;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletResponseWrapper;
 
 import org.apache.catalina.Context;
-import org.apache.catalina.Globals;
 import org.apache.catalina.Session;
 import org.apache.catalina.security.SecurityUtil;
 import org.apache.catalina.util.SessionConfig;
@@ -74,31 +74,7 @@ public class Response implements HttpServletResponse {
 
     private static final MediaTypeCache MEDIA_TYPE_CACHE = new MediaTypeCache(100);
 
-    /**
-     * Compliance with SRV.15.2.22.1. A call to Response.getWriter() if no
-     * character encoding has been specified will result in subsequent calls to
-     * Response.getCharacterEncoding() returning ISO-8859-1 and the Content-Type
-     * response header will include a charset=ISO-8859-1 component.
-     */
-    private static final boolean ENFORCE_ENCODING_IN_GET_WRITER;
-
-    static {
-        ENFORCE_ENCODING_IN_GET_WRITER = Boolean.parseBoolean(
-                System.getProperty("org.apache.catalina.connector.Response.ENFORCE_ENCODING_IN_GET_WRITER",
-                        "true"));
-    }
-
-
     // ----------------------------------------------------- Instance Variables
-
-    /**
-     * The date format we will use for creating date headers.
-     *
-     * @deprecated Unused. This will be removed in Tomcat 10
-     */
-    @Deprecated
-    protected SimpleDateFormat format = null;
-
 
     public Response() {
         this(OutputBuffer.DEFAULT_BUFFER_SIZE);
@@ -229,7 +205,7 @@ public class Response implements HttpServletResponse {
         isCharacterEncodingSet = false;
 
         applicationResponse = null;
-        if (Globals.IS_SECURITY_ENABLED || Connector.RECYCLE_FACADES) {
+        if (getRequest().getDiscardFacades()) {
             if (facade != null) {
                 facade.clear();
                 facade = null;
@@ -581,7 +557,7 @@ public class Response implements HttpServletResponse {
                 (sm.getString("coyoteResponse.getWriter.ise"));
         }
 
-        if (ENFORCE_ENCODING_IN_GET_WRITER) {
+        if (request.getConnector().getEnforceEncodingInGetWriter()) {
             /*
              * If the response's character encoding has not been specified as
              * described in <code>getCharacterEncoding</code> (i.e., the method
@@ -868,7 +844,7 @@ public class Response implements HttpServletResponse {
     public Collection<String> getHeaderNames() {
         MimeHeaders headers = getCoyoteResponse().getMimeHeaders();
         int n = headers.size();
-        ArrayList<String> result = new ArrayList<>(n);
+        List<String> result = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
             result.add(headers.getName(i).toString());
         }
@@ -879,9 +855,8 @@ public class Response implements HttpServletResponse {
 
     @Override
     public Collection<String> getHeaders(String name) {
-        Enumeration<String> enumeration =
-                getCoyoteResponse().getMimeHeaders().values(name);
-        ArrayList<String> result = new ArrayList<>();
+        Enumeration<String> enumeration = getCoyoteResponse().getMimeHeaders().values(name);
+        Set<String> result = new LinkedHashSet<>();
         while (enumeration.hasMoreElements()) {
             result.add(enumeration.nextElement());
         }
@@ -1393,8 +1368,9 @@ public class Response implements HttpServletResponse {
 
         char cc=name.charAt(0);
         if (cc=='C' || cc=='c') {
-            if (checkSpecialHeader(name, value))
+            if (checkSpecialHeader(name, value)) {
                 return;
+            }
         }
 
         getCoyoteResponse().setHeader(name, value);
